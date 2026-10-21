@@ -1,8 +1,9 @@
-
+```groovy
 pipeline {
     agent any
 
     environment {
+        PATH+KUBECTL = '/snap/bin:/usr/local/bin'
         DOCKERHUB_NAMESPACE = 'mohammed071'
         IMAGE_NAME = 'urban-fabrics'
         K8S_NAMESPACE = 'default'
@@ -12,6 +13,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
+
                 script {
                     env.IMAGE_TAG = sh(
                         script: 'git rev-parse --short=7 HEAD',
@@ -48,6 +50,7 @@ pipeline {
                 ]) {
                     sh '''
                         set +x
+
                         printf '%s' "$DOCKERHUB_TOKEN" |
                           docker login \
                             --username "$DOCKERHUB_USER" \
@@ -65,20 +68,26 @@ pipeline {
         stage('Deploy to Minikube') {
             steps {
                 sh '''
-                    export IMAGE_TAG="$IMAGE_TAG"
-                    export DOCKERHUB_NAMESPACE="$DOCKERHUB_NAMESPACE"
+                    set -e
 
+                    echo "Checking Kubernetes access..."
+                    kubectl get nodes
+
+                    echo "Applying Kubernetes deployment..."
                     envsubst < k8s/deployment.yaml |
                       kubectl apply -n "$K8S_NAMESPACE" -f -
 
+                    echo "Applying Kubernetes service..."
                     kubectl apply \
                       -n "$K8S_NAMESPACE" \
                       -f k8s/service.yaml
 
+                    echo "Waiting for deployment..."
                     kubectl -n "$K8S_NAMESPACE" rollout status \
                       deployment/urban-fabrics \
                       --timeout=180s
 
+                    echo "Checking deployment resources..."
                     kubectl -n "$K8S_NAMESPACE" get \
                       deployment,pods,service \
                       -l app=urban-fabrics
@@ -99,3 +108,4 @@ pipeline {
         }
     }
 }
+```
